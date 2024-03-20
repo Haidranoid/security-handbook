@@ -1,6 +1,9 @@
 package com.alibou.security.auth;
 
 import com.alibou.security.config.JwtService;
+import com.alibou.security.token.Token;
+import com.alibou.security.token.TokenRepository;
+import com.alibou.security.token.TokenType;
 import com.alibou.security.user.Role;
 import com.alibou.security.user.User;
 import com.alibou.security.user.UserRepository;
@@ -23,6 +26,7 @@ public class AuthenticationService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
+    private final TokenRepository tokenRepository;
     private final JwtService jwtService;
 
     public AuthenticationResponse register(RegisterRequest request) {
@@ -34,10 +38,11 @@ public class AuthenticationService {
                 .role(Role.USER)
                 .build();
 
-        userRepository.save(user);
-
+        var savedUser = userRepository.save(user);
         var jwtToken = jwtService.generateToken(user);
         var refreshToken = jwtService.generateRefreshToken(user);
+
+        saveUserToken(savedUser, jwtToken);
 
         return AuthenticationResponse.builder()
                 .accessToken(jwtToken)
@@ -59,10 +64,36 @@ public class AuthenticationService {
         var jwtToken = jwtService.generateToken(user);
         var refreshToken = jwtService.generateRefreshToken(user);
 
+        revokeAllUserTokens(user);
+        saveUserToken(user, jwtToken);
+
         return AuthenticationResponse.builder()
                 .accessToken(jwtToken)
                 .refreshToken(refreshToken)
                 .build();
+    }
+
+    private void saveUserToken(User user, String jwtToken) {
+        var token = Token.builder()
+                .user(user)
+                .token(jwtToken)
+                .tokenType(TokenType.BEARER)
+                .revoked(false)
+                .expired(false)
+                .build();
+
+        tokenRepository.save(token);
+    }
+
+    private void revokeAllUserTokens(User user) {
+        var validUserTokens = tokenRepository.findAllValidTokensByUser(user.getId());
+        if (validUserTokens.isEmpty())
+            return;
+        validUserTokens.forEach(token -> {
+            token.setExpired(true);
+            token.setRevoked(true);
+        });
+        tokenRepository.saveAll(validUserTokens);
     }
 
     public void refreshToken(
@@ -85,8 +116,8 @@ public class AuthenticationService {
             if (jwtService.isTokenValid(refreshToken, user)) {
                 var accessToken = jwtService.generateToken(user);
 
-                // revokeAllUserTokens(user);
-                // saveUserToken(user, accessToken);
+                revokeAllUserTokens(user);
+                saveUserToken(user, accessToken);
 
                 var authResponse = AuthenticationResponse.builder()
                         .accessToken(accessToken)

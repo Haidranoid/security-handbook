@@ -22,7 +22,7 @@ public class Token {
     private TokenType tokenType;
     private boolean expired;
     private boolean revoked;
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
     private User user;
 }

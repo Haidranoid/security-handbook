@@ -17,6 +17,12 @@ public class DemoController {
     public ResponseEntity<String> sayHello(Authentication authentication) {
         var user = (User) authentication.getPrincipal();
         var message = "Hello, " + user.getEmail();
+
+        try {
+            System.out.println(user.getTokens());
+        }catch (Exception e){
+            System.out.println(e.getMessage());
+        }
         return ResponseEntity.ok(message);
     }
 }
